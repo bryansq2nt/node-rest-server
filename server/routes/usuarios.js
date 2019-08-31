@@ -1,15 +1,14 @@
 const express = require('express')
 const bcrypt = require('bcryptjs')
-
 const _ = require('underscore');
 
 const Usuario = require('../models/usuario')
-
+const { verificaToken, verificaAdminRole } = require('../middlewares/auth')
 
 const app = express()
 
 
-app.get('/usuarios', function(req, res) {
+app.get('/usuarios', verificaToken, (req, res) => {
     let desde = req.query.desde || 0;
     desde = Number(desde);
     let limite = req.query.limite || 5;
@@ -39,15 +38,38 @@ app.get('/usuarios', function(req, res) {
         })
 })
 
-app.get('/usuarios/:id', function(req, res) {
+app.get('/usuarios/:id', verificaToken, (req, res) => {
     let id = req.params.id;
-    res.json(`Get User with id: ${id}`)
+    Usuario.findById(id, (err, UsuarioDB) => {
+        if (err) {
+            return res.status(400).json({
+                ok: false,
+                err
+            })
+        }
+
+        res.json({
+            ok: true,
+            usuario: UsuarioDB
+        })
+    })
+
 })
 
-app.post('/usuarios', function(req, res) {
+app.post('/usuarios', [verificaToken, verificaAdminRole], (req, res) => {
 
     let body = req.body;
     let salt = bcrypt.genSaltSync(10);
+
+    if (!body.password) {
+        return res.status(400).json({
+            ok: false,
+            err: {
+                message: 'La contrasena es necesaria'
+            }
+        })
+    }
+
     let usuario = new Usuario({
         nombre: body.nombre,
         email: body.email,
@@ -63,6 +85,8 @@ app.post('/usuarios', function(req, res) {
             })
         }
 
+
+
         res.json({
             ok: true,
             usuario: usuarioDB
@@ -72,7 +96,7 @@ app.post('/usuarios', function(req, res) {
 
 })
 
-app.put('/usuarios/:id', function(req, res) {
+app.put('/usuarios/:id', [verificaToken, verificaAdminRole], (req, res) => {
     let id = req.params.id;
     let body = _.pick(req.body, ['nombre', 'email', 'img', 'role', 'estado']);
     Usuario.findByIdAndUpdate(id, body, { new: true, runValidators: true }, (err, usuarioDB) => {
@@ -91,7 +115,7 @@ app.put('/usuarios/:id', function(req, res) {
 
 })
 
-app.delete('/usuarios/:id', function(req, res) {
+app.delete('/usuarios/:id', [verificaToken, verificaAdminRole], (req, res) => {
     let id = req.params.id;
 
     Usuario.findByIdAndUpdate(id, { estado: false }, { new: true }, (err, usuarioDB) => {
@@ -102,34 +126,21 @@ app.delete('/usuarios/:id', function(req, res) {
             })
         }
 
-        res.json({
-            ok: true,
-            usuario: usuarioDB
-        })
-    });
-    /*Usuario.findByIdAndRemove(id, (err, usuarioBorrado) => {
-        if (err) {
-            return res.status(400).json({
-                ok: false,
-                err
-            })
-        }
-
-        if (!usuarioBorrado) {
+        if (!usuarioDB) {
             return res.status(400).json({
                 ok: false,
                 err: {
-                    message: 'Usuario no encontrado'
+                    message: 'El usuario no existe'
                 }
             })
         }
 
         res.json({
             ok: true,
-            usuario: usuarioBorrado
+            usuario: usuarioDB
         })
+    });
 
-    });*/
 })
 
 module.exports = app;
